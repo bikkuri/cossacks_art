@@ -25,7 +25,7 @@ export default class TargetsParser {
                     responseType: "json",
                     signal: controller.signal
                 })
-                    .then(response => {
+                    .then((response, reject) => {
                         danger = [];
                         let success = [];
                         let body = response.data;
@@ -60,7 +60,7 @@ export default class TargetsParser {
         let targetsUrl = "https://api.mordor-sites-status.info/api/sites";
         let targets = [];
 
-        return await new Promise(resolve => {
+        return await new Promise((resolve, reject) => {
             const controller = new AbortController();
             axios({
                 url: targetsUrl,

@@ -5,6 +5,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "start": "node --expose-gc index.js",
+    "startCustom": "npm start -- -g false",
+    "startPublic": "npm start -- -c false",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
