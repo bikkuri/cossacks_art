@@ -37,13 +37,14 @@ export default class TargetsParser {
                             targets = targets.concat(success);
                             available = !!success.length;
                         }
-                        resolve();
                     })
                     .catch((error) => {
+                        controller.abort();
                         reject();
                     })
                     .then(() => {
                         controller.abort();
+                        resolve();
                     });
                 targetPage++;
             });
@@ -53,6 +54,7 @@ export default class TargetsParser {
                 break;
             }
         }
+        global.gc();
         return targets;
     }
 
@@ -72,13 +74,15 @@ export default class TargetsParser {
                     if (json) {
                         targets = json.filter(item => item.status === "up").map(item => [`https://${item.name}:443`, `http://${item.name}`]).flat();
                     }
-                    resolve(targets);
                 })
                 .catch((error) => {
+                    controller.abort();
                     reject();
                 })
                 .then(() => {
                     controller.abort();
+                    global.gc();
+                    resolve(targets);
                 });
         })
     }

@@ -81,7 +81,7 @@ export default class Engine {
             this.fillCode();
         }
         if (!this.preDone) {
-            if (this.requests - this.responses >= 2000) {
+            if (this.requests - this.responses >= 500) {
                 this.paused = true;
             }
             if (!this.paused && this.everyTimeElapsed(100)) {
@@ -127,6 +127,7 @@ export default class Engine {
                     } else {
                         this.fillCode('error');
                     }
+                    controller.abort();
                 })
                 .then(() => {
                     this.responses++;
