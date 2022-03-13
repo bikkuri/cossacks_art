@@ -17,12 +17,6 @@ const argv = yargs(hideBin(process.argv))
         //default: 1000 * 60 * 60 * 24
         default: 0
     })
-    .option('period', {
-        alias: "p",
-        type: "number",
-        describe: "Attack period",
-        default: 0
-    })
     .option('targetsRefresh', {
         alias: "r",
         type: "number",
