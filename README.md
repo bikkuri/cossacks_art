@@ -17,10 +17,13 @@ Use only with VPN!!!
 
 ##### Examples:
 Default configuration. Will be parsed public targets and used custom users's targets from targets file:  
-`node index`
+`npm start`
 
 Use only public targets:  
-`node index -c false`
+`node run startPublic`
 
 Use only custom targets from file:  
-`node index -g false`
+`node startCustom`
+
+Example to use with rest of parameters:
+`npm start -- --streams 100 --time 10000`

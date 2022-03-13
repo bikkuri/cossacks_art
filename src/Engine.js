@@ -68,7 +68,7 @@ export default class Engine {
         let timeout = setTimeout(() => {
             this.render(this.deltaTime);
             clearTimeout(timeout);
-        }, 1000 / 60);
+        }, 300);
     }
 
     enterFrame () {
@@ -158,15 +158,15 @@ export default class Engine {
         return "";
     }
 
-    fillCode(statusCode = -1) {
-        //if (statusCode === -1) return;
-
+    fillCode(statusCode = "") {
         let string = "";
 
-        if (this.codes[statusCode] === undefined) {
-            this.codes[statusCode] = 1;
-        } else if (statusCode) {
-            this.codes[statusCode] += 1;
+        if (statusCode !== "") {
+            if (this.codes[statusCode] === undefined) {
+                this.codes[statusCode] = 1;
+            } else if (statusCode) {
+                this.codes[statusCode] += 1;
+            }
         }
 
         string += "\r\n----- Status stat -----\r\n";
