@@ -1,5 +1,9 @@
 # cossacks_art
 
+##### Desription
+Cossacks Artillery :)
+Use only with VPN!!!
+
 ##### install:
 1. clone repo: git clone git@github.com:bikkuri/cossacks_art.git
 2. install dependencies: npm install
