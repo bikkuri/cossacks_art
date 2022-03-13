@@ -12,11 +12,11 @@
 * --timeout -0 [Number] : Time limit to waiting response (default: 3000)
 
 ##### Examples:
-Default configuration. Will be parsed public targets and used custom users's targets from targets file:
+Default configuration. Will be parsed public targets and used custom users's targets from targets file:  
 `node index`
 
-Use only public targets:
+Use only public targets:  
 `node index -c false`
 
-Use only custom targets from file:
+Use only custom targets from file:  
 `node index -g false`
