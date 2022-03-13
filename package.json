@@ -1,0 +1,25 @@
+{
+  "name": "cossacks_art",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bikkuri/cossacks_art.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bikkuri/cossacks_art/issues"
+  },
+  "homepage": "https://github.com/bikkuri/cossacks_art#readme",
+  "dependencies": {
+    "axios": "^0.26.1",
+    "ora": "^6.1.0",
+    "yargs": "^17.3.1"
+  }
+}
