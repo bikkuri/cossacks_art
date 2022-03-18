@@ -2,12 +2,10 @@ import axios from "axios";
 
 export default class TargetsParser {
     static async getAllTargets () {
-        let targets = await Promise.all([
+        return this.shuffle(await Promise.all([
             await TargetsParser.getSeparsTargets(),
             await TargetsParser.getMordorTargets()
-        ].flat());
-
-        return this.shuffle(targets);
+        ].flat().filter(this.onlyUnique)));
     }
     static async getSeparsTargets () {
         let targetsUrl = "https://stats.frontend.im/api/getMonitorlist/gV8xvSq5Bv";
@@ -107,5 +105,9 @@ export default class TargetsParser {
         }
 
         return array;
+    }
+
+    onlyUnique (value, index, self) {
+        return self.indexOf(value) === index;
     }
 }
