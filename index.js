@@ -1,7 +1,7 @@
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import Engine from "./src/Engine.js";
-
+import axios from "axios";
 
 const argv = yargs(hideBin(process.argv))
     .option('streams', {

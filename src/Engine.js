@@ -25,6 +25,8 @@ export default class Engine {
         this.updating = false;
         this.paused = false;
 
+        this.workers = [];
+
         this.start();
     }
 
@@ -106,34 +108,48 @@ export default class Engine {
         for (let i = this.argv.streams; i--;) {
             this.requests++;
             const controller = new AbortController();
-            axios({
-                url,
-                timeout: this.argv.timeout,
-                signal: controller.signal,
-                headers: {
-                    "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0",
-                    "Pragma": "no-cache"
-                }
-            })
+            let instance = this.workers.find(worker => worker.state === "ready");
+
+            if (!instance) {
+                instance = axios.create({
+                    url,
+                    timeout: this.argv.timeout,
+                    signal: controller.signal,
+                    headers: {
+                        "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0",
+                        "Pragma": "no-cache"
+                    }
+                });
+                this.workers.push(instance);
+            }
+
+            instance.state = "busy";
+            instance.get(url)
                 .then((response) => {
                     if (response.status) {
                         this.fillCode(Number(response.status));
                     }
+                    instance.state = "ready";
+                    this.responses++;
                 })
                 .catch((error) => {
-                    if (error.response && error.response.status) {
+                    if (error.response) {
                         this.fillCode(error.response.status);
 
+                    } else if (error.request) {
+                        this.fillCode('noResponse :)');
                     } else {
-                        this.fillCode('error');
+                        this.fillCode('other error');
                     }
-                    controller.abort();
+                    instance.state = "ready";
+                    this.responses++;
                 })
                 .then(() => {
-                    this.responses++;
-                    controller.abort();
+                    //controller.abort();
                 });
         }
+        //this.workers = this.workers.filter(worker => worker.state === "busy");
+        this.fillCode();
         global.gc();
     }
 
@@ -169,6 +185,10 @@ export default class Engine {
                 this.codes[statusCode] += 1;
             }
         }
+
+        string += "\r\n----- Workers stat -----\r\n";
+        let workersBusy = this.workers.filter(worker => worker.state === "ready");
+        string += `workers: ${this.workers.length} | workers busy: ${workersBusy.length} | workers free: ${this.workers.length - workersBusy.length}\r\n`;
 
         string += "\r\n----- Status stat -----\r\n";
         for (let key in this.codes) {
