@@ -39,7 +39,7 @@ const argv = yargs(hideBin(process.argv))
         alias: "o",
         type: "number",
         describe: "Request timout",
-        default: 3000
+        default: 10000
     })
     .argv;
 

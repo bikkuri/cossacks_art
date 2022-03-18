@@ -1,12 +1,22 @@
 import axios from "axios";
+import manualTargets from "../targets/targets.js";
 
 export default class TargetsParser {
     static async getAllTargets () {
-        return this.shuffle(await Promise.all([
+        let targets = await Promise.all([
+            TargetsParser.getCustomTargets(),
             await TargetsParser.getSeparsTargets(),
             await TargetsParser.getMordorTargets()
-        ].flat().filter(this.onlyUnique)));
+        ].flat().filter(TargetsParser.onlyUnique))
+        targets = targets.map(url => [`http://${url}`, `https://${url}:443`]).flat();
+
+        return this.shuffle(targets);
     }
+
+    static getCustomTargets () {
+        return manualTargets.slice();
+    }
+
     static async getSeparsTargets () {
         let targetsUrl = "https://stats.frontend.im/api/getMonitorlist/gV8xvSq5Bv";
         let targetPage = 1;
@@ -16,12 +26,13 @@ export default class TargetsParser {
         let available = true;
 
         while (available) {
-            await new Promise(resolve => {
+            await new Promise((resolve, reject) => {
                 const controller = new AbortController();
                 axios({
                     url: `${targetsUrl}?page=${targetPage}&_=${dateNow}`,
                     responseType: "json",
-                    signal: controller.signal
+                    signal: controller.signal,
+                    timeout: TargetsParser.timeout
                 })
                     .then((response, reject) => {
                         danger = [];
@@ -30,15 +41,18 @@ export default class TargetsParser {
                         if (body) {
                             let json = body;
                             let monitors = json.psp.monitors;
-                            success = monitors.filter(item => item.statusClass === "success").map(item => [`http://${item.name}`, `https://${item.name}:443`]).flat();
+                            success = monitors.filter(item => item.statusClass === "success").map(item => item.name);
                             danger = monitors.filter(item => item.statusClass === "danger").map(item => item.name);
                             targets = targets.concat(success);
                             available = !!success.length;
                         }
                     })
                     .catch((error) => {
+                        targets = [];
+                        console.warn("TargetsParser fail: 'https://stats.frontend.im' is not available now");
                         controller.abort();
-                        reject();
+                        available = false;
+                        resolve();
                     })
                     .then(() => {
                         controller.abort();
@@ -52,6 +66,11 @@ export default class TargetsParser {
                 break;
             }
         }
+
+        if (targets.length) {
+            console.log("TargetsParser: 'https://stats.frontend.im' parsed successfuly!");
+        }
+
         global.gc();
         return targets;
     }
@@ -65,21 +84,27 @@ export default class TargetsParser {
             axios({
                 url: targetsUrl,
                 responseType: "json",
-                signal: controller.signal
+                signal: controller.signal,
+                timeout: TargetsParser.timeout
             })
                 .then(response => {
                     let json = response.data;
                     if (json) {
-                        targets = json.filter(item => item.status === "up").map(item => [`https://${item.name}:443`, `http://${item.name}`]).flat();
+                        targets = json.filter(item => item.status === "up").map(item => item.name);
                     }
                 })
                 .catch((error) => {
+                    targets = [];
+                    console.warn("\r\nTargetsParser fail: 'https://api.mordor-sites-status.info' is not available now");
                     controller.abort();
-                    reject();
+                    resolve(targets);
                 })
                 .then(() => {
                     controller.abort();
                     global.gc();
+                    if (targets.length) {
+                        console.log("\r\nTargetsParser: 'https://api.mordor-sites-status.info' parsed successfuly!");
+                    }
                     resolve(targets);
                 });
         })
@@ -107,7 +132,11 @@ export default class TargetsParser {
         return array;
     }
 
-    onlyUnique (value, index, self) {
+    static get timeout () {
+        return 5000;
+    }
+
+    static onlyUnique (value, index, self) {
         return self.indexOf(value) === index;
     }
 }

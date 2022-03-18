@@ -22,6 +22,7 @@
   "homepage": "https://github.com/bikkuri/cossacks_art#readme",
   "dependencies": {
     "axios": "^0.26.1",
+    "chalk": "^5.0.1",
     "ora": "^6.1.0",
     "yargs": "^17.3.1"
   }
