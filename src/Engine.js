@@ -30,9 +30,12 @@ export default class Engine {
         this.responses = 0;
         this.requests = 0;
         this.attacksNumber = 0;
+        this.countedDiff = 0;
+        this.prevCountedDiff = 0;
 
         this.updating = false;
         this.paused = false;
+        this.waiting = false;
 
         this.id = 0;
         this.workers = [];
@@ -56,14 +59,6 @@ export default class Engine {
         this.targets = this.argv.targets ? await TargetsParser.getAllTargets() : await TargetsParser.getCustomTargets();
     }
 
-    async updateTargets () {
-        this.paused = true;
-        this.updating = true;
-        this.fillCode();
-        this.targets = this.argv.targets ? await TargetsParser.getAllTargets() : await TargetsParser.getCustomTargets();
-        this.updating = false;
-    }
-
     render(delta = 0) {
         if (!this.paused) {
             this.timeElapsed = Date.now() - this.startTime - this.pauseTime;
@@ -80,33 +75,95 @@ export default class Engine {
     }
 
     enterFrame () {
+        // if process has been done
         if (this.done) {
             this.fillCode();
             setTimeout(() => process.exit(), 500);
         }
+        // finish process if time of
         if (this.totalTime > 0 && this.timeElapsed > this.totalTime && !this.preDone) {
             this.preDone = true;
             this.fillCode();
         }
-        if (!this.preDone) {
-            if (this.requests - this.responses >= this.REQ_RES_DIFF) {
-                this.paused = true;
-            }
-            if (!this.paused && this.everyTimeElapsed(100)) {
+
+        // set the req/res diff
+        this.countedDiff = this.requests - this.responses;
+
+        // set pause if difference between req and res got the limit
+        if (this.countedDiff >= this.REQ_RES_DIFF) {
+            this.startWaiting();
+        }
+
+        // attack if not pause
+        if (!this.preDone && !this.paused) {
+            if (this.everyTimeElapsed(100)) {
                 this.attack();
                 this.fillCode();
-                if (this.everyTimeElapsed(this.argv.targetsRefresh)) {
-                    this.updateTargets();
-                }
-            } else if (this.paused && this.requests === this.responses) {
-                this.paused = false;
+            }
+        }
+
+        // prepare for finish process
+        if (this.preDone && !this.done) {
+            // waiting for rest of response
+            if (this.responses < this.requests) {
+                this.paused = true;
+                this.waiting = true;
+                this.waitingTime = Date.now();
+                // done
+            } else {
+                this.done = true;
                 this.fillCode();
             }
-        } else if (this.responses >= this.requests && !this.done) {
-            this.done = true;
+        };
+
+        // updating
+        if (!this.updating && this.everyTimeElapsed(this.argv.targetsRefresh)) {
+            this.startWaiting();
+            this.prepareUpdate = true;
+            this.paused = true;
+        } else if (this.prepareUpdate && !this.waiting) {
+            this.prepareUpdate = false;
+            this.updateTargets();
+        }
+
+        // waiting
+        if (this.waiting) {
+            if (this.prevCountedDiff === this.countedDiff) {
+                this.waitingTime += this.deltaTime;
+            } else {
+                this.waitingTime = 0;
+            }
+            this.prevCountedDiff = this.countedDiff;
+
+            if (this.waitingTime >= this.REQ_RESP_DIFF_TIME || this.countedDiff === 0) {
+                this.stopWaiting();
+            }
             this.fillCode();
         }
 
+    }
+
+    startWaiting () {
+        this.paused = true;
+        this.waiting = true;
+        this.waitingTime = Date.now();
+    }
+
+    stopWaiting () {
+        this.waitingTime = 0;
+        this.requests = this.responses;
+        this.waiting = false;
+        this.paused = this.prepareUpdate;
+        this.prevCountedDiff = 0;
+    }
+
+    async updateTargets () {
+        this.paused = true;
+        this.updating = true;
+        this.fillCode();
+        this.targets = this.argv.targets ? await TargetsParser.getAllTargets(this.targets) : await TargetsParser.getCustomTargets(this.targets);
+        this.paused = false;
+        this.updating = false;
     }
 
     attack () {
@@ -276,7 +333,7 @@ export default class Engine {
         } else if (this.updating) {
             string += `Updating targets...\r\n`;
         } else if (this.paused) {
-            string += `Waiting...\r\n`;
+            string += `Waiting for ${this.countedDiff} responses... ${this.msToTime(this.REQ_RESP_DIFF_TIME - this.waitingTime)}\r\n`;
         };
 
         if (this.preDone && !this.done) {
@@ -305,7 +362,11 @@ export default class Engine {
     }
 
     get REQ_RES_DIFF () {
-        return 2000;
+        return this.argv.diffNumber;
+    }
+
+    get REQ_RESP_DIFF_TIME () {
+        return this.argv.diffTimeout
     }
 
     get RESULTS_LIMIT () {

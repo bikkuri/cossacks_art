@@ -8,7 +8,7 @@ const argv = yargs(hideBin(process.argv))
         alias: "s",
         type: "number",
         describe: "Number of simultanious connections to one host",
-        default: 50
+        default: 25
     })
     .option('time', {
         alias: "t",
@@ -21,7 +21,7 @@ const argv = yargs(hideBin(process.argv))
         alias: "r",
         type: "number",
         describe: "Targets refresh period",
-        default: 1000 * 60 * 30
+        default: 1000 * 60 * 60
     })
     .option('targets', {
         alias: "g",
@@ -39,6 +39,18 @@ const argv = yargs(hideBin(process.argv))
         alias: "o",
         type: "number",
         describe: "Request timout",
+        default: 10000
+    })
+    .option('diffNumber', {
+        alias: "d",
+        type: "number",
+        describe: "Request-response number difference for waiting",
+        default: 2000
+    })
+    .option('diffTimeout', {
+        alias: "dt",
+        type: "number",
+        describe: "Request-response time difference for waiting",
         default: 10000
     })
     .argv;

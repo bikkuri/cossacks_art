@@ -2,19 +2,19 @@ import axios from "axios";
 import manualTargets from "../targets/targets.js";
 
 export default class TargetsParser {
-    static async getAllTargets () {
+    static async getAllTargets (inTargets = []) {
         let targets = await Promise.all([
             TargetsParser.getCustomTargets(),
             await TargetsParser.getSeparsTargets(),
             await TargetsParser.getMordorTargets()
-        ].flat().filter(TargetsParser.onlyUnique))
-        targets = targets.map(url => [`http://${url}`, `https://${url}:443`]).flat();
+        ].flat())
+        targets = inTargets.concat(targets.map(url => [`http://${url}`, `https://${url}:443`]).flat()).filter(TargetsParser.onlyUnique);
 
         return this.shuffle(targets);
     }
 
-    static getCustomTargets () {
-        return manualTargets.slice();
+    static getCustomTargets (inTargets = []) {
+        return this.shuffle(inTargets.concat(manualTargets.slice().map(url => [`http://${url}`, `https://${url}:443`]).flat()).filter(TargetsParser.onlyUnique));
     }
 
     static async getSeparsTargets () {
