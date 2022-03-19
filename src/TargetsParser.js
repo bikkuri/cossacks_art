@@ -28,11 +28,9 @@ export default class TargetsParser {
 
         while (available) {
             await new Promise((resolve, reject) => {
-                const controller = new AbortController();
                 axios({
                     url: `${targetsUrl}?page=${targetPage}&_=${dateNow}`,
                     responseType: "json",
-                    signal: controller.signal,
                     timeout: TargetsParser.timeout
                 })
                     .then((response, reject) => {
@@ -51,12 +49,10 @@ export default class TargetsParser {
                     .catch((error) => {
                         targets = [];
                         console.warn("TargetsParser fail: 'https://stats.frontend.im' is not available now");
-                        controller.abort();
                         available = false;
                         resolve();
                     })
                     .then(() => {
-                        controller.abort();
                         resolve();
                     });
                 targetPage++;
@@ -78,37 +74,30 @@ export default class TargetsParser {
 
     static async getMordorTargets () {
         let targetsUrl = "https://api.mordor-sites-status.info/api/sites";
-        let targets = [];
-
-        return await new Promise((resolve, reject) => {
-            const controller = new AbortController();
+        let targets = await new Promise((resolve, reject) => {
             axios({
                 url: targetsUrl,
                 responseType: "json",
-                signal: controller.signal,
                 timeout: TargetsParser.timeout
             })
                 .then(response => {
                     let json = response.data;
                     if (json) {
-                        targets = json.filter(item => item.status === "up").map(item => item.name);
+                        resolve(json.filter(item => item.status === "up").map(item => item.name));
                     }
                 })
                 .catch((error) => {
-                    targets = [];
                     console.warn("\r\nTargetsParser fail: 'https://api.mordor-sites-status.info' is not available now");
-                    controller.abort();
-                    resolve(targets);
+                    resolve([]);
                 })
                 .then(() => {
-                    controller.abort();
-                    global.gc();
                     if (targets.length) {
                         console.log("\r\nTargetsParser: 'https://api.mordor-sites-status.info' parsed successfuly!");
                     }
-                    resolve(targets);
                 });
         })
+        global.gc();
+        return targets;
     }
 
     static onlyUnique (value, index, self) {
