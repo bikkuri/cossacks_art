@@ -1,6 +1,7 @@
 import axios from "axios";
 import manualTargets from "../targets/targets.js";
 
+
 export default class TargetsParser {
     static async getAllTargets (inTargets = []) {
         let targets = await Promise.all([
@@ -8,13 +9,13 @@ export default class TargetsParser {
             await TargetsParser.getSeparsTargets(),
             await TargetsParser.getMordorTargets()
         ].flat())
-        targets = inTargets.concat(targets.map(url => [`http://${url}`, `https://${url}:443`]).flat()).filter(TargetsParser.onlyUnique);
+        targets = inTargets.concat(targets.map(url => [`http://${url}`, `https://${url}`]).flat()).filter(TargetsParser.onlyUnique);
 
         return this.shuffle(targets);
     }
 
     static getCustomTargets (inTargets = []) {
-        return this.shuffle(inTargets.concat(manualTargets.slice().map(url => [`http://${url}`, `https://${url}:443`]).flat()).filter(TargetsParser.onlyUnique));
+        return this.shuffle(inTargets.concat(manualTargets.slice().map(url => [`http://${url}`, `https://${url}`]).flat()).filter(TargetsParser.onlyUnique));
     }
 
     static async getSeparsTargets () {
