@@ -15,7 +15,6 @@ export default class Engine {
         this.totalTime = argv.time;
         this.lastFrame = 0;
         this.deltaTime = 0;
-        this.pauseTime = 0;
         this.nextCall = {};
         this.targets = [];
         this.accuracy = "0%";
@@ -63,13 +62,10 @@ export default class Engine {
     }
 
     render(delta = 0) {
-        if (!this.paused) {
-            this.timeElapsed = Date.now() - this.startTime - this.pauseTime;
-            this.deltaTime = Date.now() - this.lastFrame;
-            this.lastFrame = Date.now();
-        } else {
-            this.pauseTime += delta;
-        }
+        this.timeElapsed = Date.now() - this.startTime;
+        this.deltaTime = Date.now() - this.lastFrame;
+        this.lastFrame = Date.now();
+
         this.enterFrame();
         let timeout = setTimeout(() => {
             this.render(this.deltaTime);
@@ -84,13 +80,12 @@ export default class Engine {
 
         // if process has been done
         if (this.done) {
-            this.fillCode();
+            this.fillMonitor();
             setTimeout(() => process.exit(), 500);
         }
         // finish process if time of
         if (this.totalTime > 0 && this.timeElapsed > this.totalTime && !this.preDone) {
             this.preDone = true;
-            this.fillCode();
         }
 
         // set pause if workers limit reached
@@ -113,7 +108,6 @@ export default class Engine {
         // attack if not pause
         if (!this.preDone && !this.paused && this.everyTimeElapsed(100)) {
             this.attack();
-            this.fillCode();
         }
 
         // prepare for finish process
@@ -126,7 +120,6 @@ export default class Engine {
                 // done
             } else {
                 this.done = true;
-                this.fillCode();
             }
         };
 
@@ -152,9 +145,9 @@ export default class Engine {
             if (this.waitingTime >= this.REQ_RESP_DIFF_TIME || this.countedDiff === 0) {
                 this.stopWaiting();
             }
-            this.fillCode();
         }
 
+        this.fillMonitor();
     }
 
     startWaitingWorkers () {
@@ -184,7 +177,7 @@ export default class Engine {
     async updateTargets () {
         this.paused = true;
         this.updating = true;
-        this.fillCode();
+        this.fillMonitor();
         this.targets = this.argv.targets ? await TargetsParser.getAllTargets(this.targets) : await TargetsParser.getCustomTargets(this.targets);
         this.paused = false;
         this.updating = false;
@@ -272,7 +265,7 @@ export default class Engine {
             }
         }
 
-        this.fillCode();
+        this.fillMonitor();
         global.gc();
     }
 
@@ -298,12 +291,7 @@ export default class Engine {
         return "";
     }
 
-    fillCode(statusCode = "") {
-        //return;
-        let string = "";
-        let yellow = chalk.hex("#ffc800");
-        let green = chalk.hex("#10bd0d");
-
+    fillCode (statusCode = "") {
         if (statusCode !== "") {
             if (this.codes[statusCode] === undefined) {
                 this.codes[statusCode] = 1;
@@ -311,6 +299,13 @@ export default class Engine {
                 this.codes[statusCode] += 1;
             }
         }
+    }
+
+    fillMonitor() {
+        //return;
+        let string = "";
+        let yellow = chalk.hex("#ffc800");
+        let green = chalk.hex("#10bd0d");
 
         // time ==================
         string += yellow("\r\n----- Time -----\r\n");
